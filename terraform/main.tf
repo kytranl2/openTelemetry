@@ -87,6 +87,11 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_extra_policy_
   policy_arn = aws_iam_policy.ecs_task_execution_role_extra_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "efs_access" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess"
+}
+
 # Security Group for ECS Tasks
 resource "aws_security_group" "ecs_service" {
   name        = "ecs_service_sg"
@@ -187,20 +192,30 @@ resource "aws_ecs_task_definition" "task" {
         {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "value": "http://localhost:4317"
+        },
+        {
+            "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+            "value": "grpc"
+        }
+      ],
+      "dependsOn": [
+        {
+          "containerName": "otel-collector",
+          "condition": "START"
         }
       ],
       "logConfiguration": {
-            "logDriver": "awslogs",
-            "options": {
-            "awslogs-group": "/ecs/demo-service",
-            "awslogs-region": "us-east-1",
-            "awslogs-stream-prefix": "demo-app"
-            }
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/demo-service",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "demo-app"
         }
+      }
     },
     {
       "name": "otel-collector",
-      "image": "public.ecr.aws/aws-observability/aws-otel-collector",  # Updated to use the default image
+      "image": "public.ecr.aws/aws-observability/aws-otel-collector",
       "portMappings": [
         {
           "containerPort": 4317,
@@ -209,8 +224,19 @@ resource "aws_ecs_task_definition" "task" {
       ],
       "essential": true,
       "command": [
-        "--config=/etc/otel-collector-config/otel-collector-config.yaml"
+        "--config=/etc/otel-collector-config/otel-collector-config.yaml",
+        "--feature-gates=-component.UseLocalHostAsDefaultHost"
       ],
+    #   "healthCheck": {
+    #     "command": [
+    #       "CMD-SHELL",
+    #       "echo > /dev/tcp/localhost/13133 || exit 1"
+    #     ],
+    #     "interval": 30,
+    #     "timeout": 5,
+    #     "retries": 3,
+    #     "startPeriod": 10
+    #   },
       "mountPoints": [
         {
           "sourceVolume": "otel-config",
@@ -219,13 +245,13 @@ resource "aws_ecs_task_definition" "task" {
         }
       ],
       "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "/ecs/demo-service",
-        "awslogs-region": "us-east-1",
-        "awslogs-stream-prefix": "otel-collector"
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/demo-service",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "otel-collector"
+        }
       }
-    }
     }
   ])
 
