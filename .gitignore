@@ -1,0 +1,4 @@
+.vscode
+terraform/.terraform
+target
+my-ec2-efs-keypair.pem
